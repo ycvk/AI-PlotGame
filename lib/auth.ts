@@ -32,7 +32,7 @@ export class AuthManager {
         const user: User = {
           id: 1,
           username: adminUser,
-          role: adminPwd,
+          role: "admin",
           isOnline: true,
         }
         const token = jwt.sign({ userId: user.id, username: user.username, role: user.role }, JWT_SECRET)

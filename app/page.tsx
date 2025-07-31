@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState, useRef } from "react"
+import { useAuthStore, useGameStore, useConfigStore, useUIStore } from '@/stores'
 import { ConfigManager, type AIModel } from "@/lib/config"
 import { ClientAuthManager, type User } from "@/lib/auth-client"
 import { ClientStoryEngine, type StoryNode, type GameRecord } from "@/lib/story-engine-client"
@@ -49,34 +50,70 @@ const DEFAULT_GAME_MODES = {
 
 export default function GamePage() {
   const [configManager] = useState(() => ConfigManager.getInstance())
-  const [systemInfo, setSystemInfo] = useState(configManager.getSystemInfo())
-  const [user, setUser] = useState<User | null>(null)
-  const [storyEngine, setStoryEngine] = useState<ClientStoryEngine | null>(null)
-  const [currentNode, setCurrentNode] = useState<StoryNode | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [showLogin, setShowLogin] = useState(false)
-  const [showRegister, setShowRegister] = useState(false)
-  const [showGameModeSelect, setShowGameModeSelect] = useState(false)
-  const [showGameSelectionDialog, setShowGameSelectionDialog] = useState(false)
-  const [loginForm, setLoginForm] = useState({ username: "", password: "" })
-  const [registerForm, setRegisterForm] = useState({ username: "", password: "", confirmPassword: "" })
-  const [showSettings, setShowSettings] = useState(false)
-  const [config, setConfig] = useState(configManager.getConfig())
-  const [availableModels, setAvailableModels] = useState<AIModel[]>([])
-  const [isLoadingModels, setIsLoadingModels] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [modelsFetchStatus, setModelsFetchStatus] = useState<{ type: "success" | "error" | null; message: string }>({
-    type: null,
-    message: "",
-  })
-  const [useModelDropdown, setUseModelDropdown] = useState(false)
-  const [streamingContent, setStreamingContent] = useState("")
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [showCustomModeDialog, setShowCustomModeDialog] = useState(false)
-  const [customModeForm, setCustomModeForm] = useState({ name: "", description: "", prompt: "" })
-  const [pageInput, setPageInput] = useState("")
-  const [customChoice, setCustomChoice] = useState("")
-  const [gameRecords, setGameRecords] = useState<GameRecord[]>([])
+  // 认证状态迁移到AuthStore
+  const {
+    user, setUser,
+    loginForm, setLoginForm,
+    registerForm, setRegisterForm
+  } = useAuthStore()
+  
+  // 系统信息迁移到ConfigStore
+  const { systemInfo, setSystemInfo } = useConfigStore()
+  // 游戏状态迁移到GameStore
+  const {
+    engine: storyEngine, setEngine: setStoryEngine,
+    currentNode, setCurrentNode,
+    isGenerating, setGenerating: setIsGenerating,
+    streamingContent, setStreamingContent,
+    isStreaming, setIsStreaming,
+    pageInput, setPageInput,
+    customChoice, setCustomChoice,
+    gameRecords, setGameRecords
+  } = useGameStore()
+  // UI状态迁移到Zustand UIStore
+  const { 
+    isLoading, setIsLoading,
+    showLogin, setShowLogin,
+    showRegister, setShowRegister, 
+    showGameModeSelect, setShowGameModeSelect,
+    showGameSelectionDialog, setShowGameSelectionDialog,
+    showSettings, setShowSettings,
+    showCustomModeDialog, setShowCustomModeDialog
+  } = useUIStore()
+  // 认证表单状态已迁移至AuthStore
+  // UI状态已迁移至UIStore
+  // 配置状态迁移到ConfigStore (第一部分)
+  const {
+    aiConfig, gameSettings, customGameModes, setConfig,
+    availableModels, setAvailableModels,
+    isLoadingModels, setIsLoadingModels
+  } = useConfigStore()
+  
+  // 组合配置对象以兼容原有代码
+  const config = {
+    ...aiConfig,
+    ...gameSettings,
+    customGameModes
+  }
+  // 游戏生成状态已迁移至GameStore
+  // 配置状态迁移到ConfigStore (第二部分) - 简化引用
+  const { error, setError } = useConfigStore()
+  
+  // 计算状态
+  const modelsFetchStatus = {
+    type: error ? 'error' as const : null,
+    message: error || ''
+  }
+  const setModelsFetchStatus = (status: any) => {
+    setError(status.type === 'error' ? status.message : null)
+  }
+  const useModelDropdown = availableModels.length > 0
+  const setUseModelDropdown = (_: boolean) => {} // 由availableModels自动控制
+  // 流式状态已迁移至GameStore
+  // UI状态已迁移至UIStore
+  // 自定义模式表单状态迁移到ConfigStore
+  const { customModeForm, setCustomModeForm } = useConfigStore()
+  // 页面输入、自定义选择和游戏记录已迁移至GameStore
 
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -84,16 +121,14 @@ export default function GamePage() {
     initializeApp()
   }, [])
 
-  useEffect(() => {
-    setUseModelDropdown(availableModels.length > 0)
-  }, [availableModels])
+  // useModelDropdown 由 availableModels 自动计算，无需useEffect
 
   const initializeApp = async () => {
     setIsLoading(true)
 
     await configManager.loadConfig()
     // After loadConfig, configManager's internal systemInfo is up-to-date
-    setConfig(configManager.getConfig())
+    setConfig(() => configManager.getConfig())
     setSystemInfo(configManager.getSystemInfo()) // Update React state
 
     setAvailableModels(configManager.getAvailableModels())
@@ -202,7 +237,7 @@ export default function GamePage() {
     setShowGameSelectionDialog(false) // Ensure game selection dialog is closed when starting a new game
 
     const handleStream = (content: string) => {
-      setStreamingContent((prev) => prev + content)
+      setStreamingContent(streamingContent + content)
     }
 
     try {
@@ -239,7 +274,7 @@ export default function GamePage() {
     setStreamingContent("")
 
     const handleStream = (content: string) => {
-      setStreamingContent((prev) => prev + content)
+      setStreamingContent(streamingContent + content)
     }
 
     try {
@@ -272,7 +307,7 @@ export default function GamePage() {
     setStreamingContent("")
 
     const handleStream = (content: string) => {
-      setStreamingContent((prev) => prev + content)
+      setStreamingContent(streamingContent + content)
     }
 
     try {
@@ -300,9 +335,10 @@ export default function GamePage() {
 
   const handleSaveConfig = async () => {
     try {
-      await configManager.saveConfig(config)
-      setAvailableModels(configManager.getAvailableModels())
-
+      // 使用ConfigStore的saveConfig方法
+      const { saveConfig } = useConfigStore.getState()
+      await saveConfig()
+      
       if (storyEngine) {
         storyEngine.updateAIConfig()
       }
@@ -320,19 +356,22 @@ export default function GamePage() {
     setModelsFetchStatus({ type: null, message: "" })
 
     try {
-      const result = await configManager.fetchAvailableModels(config)
-
-      if (result.success) {
-        setAvailableModels(result.models)
-        setUseModelDropdown(true)
+      // 使用ConfigStore的fetchAvailableModels方法
+      const { fetchAvailableModels } = useConfigStore.getState()
+      await fetchAvailableModels()
+      
+      // 获取更新后的availableModels
+      const updatedModels = useConfigStore.getState().availableModels
+      
+      if (updatedModels.length > 0) {
         setModelsFetchStatus({
           type: "success",
-          message: `成功获取到 ${result.models.length} 个模型`,
+          message: `成功获取到 ${updatedModels.length} 个模型`,
         })
       } else {
         setModelsFetchStatus({
           type: "error",
-          message: result.error || "获取模型列表失败",
+          message: "未找到可用模型",
         })
       }
     } catch (error) {
@@ -371,7 +410,7 @@ export default function GamePage() {
 
     const modeId = `custom_${Date.now()}`
     configManager.addCustomGameMode(modeId, customModeForm)
-    setConfig(configManager.getConfig())
+    setConfig(() => configManager.getConfig())
     setCustomModeForm({ name: "", description: "", prompt: "" })
     setShowCustomModeDialog(false)
   }
@@ -379,7 +418,7 @@ export default function GamePage() {
   const handleRemoveCustomMode = (modeId: string) => {
     if (confirm("确定要删除这个自定义模式吗？")) {
       configManager.removeCustomGameMode(modeId)
-      setConfig(configManager.getConfig())
+      setConfig(() => configManager.getConfig())
     }
   }
 
@@ -511,7 +550,7 @@ export default function GamePage() {
   }
 
   const getAllGameModes = () => {
-    const allModes = { ...DEFAULT_GAME_MODES }
+    const allModes: Record<string, { name: string; desc: string; icon: string }> = { ...DEFAULT_GAME_MODES }
     Object.entries(config.customGameModes).forEach(([id, mode]) => {
       allModes[id] = {
         name: mode.name,
@@ -801,7 +840,7 @@ export default function GamePage() {
                 <CardHeader>
                   <CardTitle className="text-xl sm:text-2xl">{currentNode.title}</CardTitle>
                   {storyEngine?.getGameState()?.variables?.location && (
-                    <Badge variant="outline">📍 {storyEngine.getGameState()?.variables.location}</Badge>
+                    <Badge variant="outline">📍 {storyEngine?.getGameState()?.variables?.location}</Badge>
                   )}
                   {currentNode.selectedChoice && (
                     <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
@@ -918,7 +957,7 @@ export default function GamePage() {
                   <div>
                     <Label>游戏模式</Label>
                     <p className="text-muted-foreground">
-                      {getAllGameModes()[storyEngine.getGameState()?.gameMode || ""]?.name || "未知"}
+                      {getAllGameModes()[storyEngine?.getGameState()?.gameMode || ""]?.name || "未知"}
                     </p>
                   </div>
                   <div>
@@ -927,22 +966,26 @@ export default function GamePage() {
                   </div>
                   <div>
                     <Label>背包物品</Label>
-                    <p className="text-muted-foreground">{storyEngine.getGameState()?.inventory?.length || 0} 个</p>
+                    <p className="text-muted-foreground">{storyEngine?.getGameState()?.inventory?.length || 0} 个</p>
                   </div>
                 </div>
 
-                {storyEngine.getGameState()?.inventory?.length > 0 && (
-                  <div className="mt-4">
-                    <Label>物品清单</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {storyEngine.getGameState()?.inventory.map((item: string, index: number) => (
-                        <Badge key={index} variant="secondary">
-                          {item}
-                        </Badge>
-                      ))}
+                {(() => {
+                  const gameState = storyEngine?.getGameState()
+                  const inventory = gameState?.inventory
+                  return inventory && inventory.length > 0 ? (
+                    <div className="mt-4">
+                      <Label>物品清单</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {inventory.map((item: string, index: number) => (
+                          <Badge key={index} variant="secondary">
+                            {item}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null
+                })()}
               </CardContent>
             </Card>
           )}
@@ -968,7 +1011,7 @@ export default function GamePage() {
                 id="username"
                 type="text"
                 value={loginForm.username}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, username: e.target.value }))}
+                onChange={(e) => setLoginForm({ username: e.target.value })}
                 placeholder="请输入用户名"
                 required
               />
@@ -979,7 +1022,7 @@ export default function GamePage() {
                 id="password"
                 type="password"
                 value={loginForm.password}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
+                onChange={(e) => setLoginForm({ password: e.target.value })}
                 placeholder="请输入密码"
                 required
               />
@@ -1004,7 +1047,7 @@ export default function GamePage() {
                 id="reg-username"
                 type="text"
                 value={registerForm.username}
-                onChange={(e) => setRegisterForm((prev) => ({ ...prev, username: e.target.value }))}
+                onChange={(e) => setRegisterForm({ username: e.target.value })}
                 placeholder="请输入用户名"
                 required
               />
@@ -1015,7 +1058,7 @@ export default function GamePage() {
                 id="reg-password"
                 type="password"
                 value={registerForm.password}
-                onChange={(e) => setRegisterForm((prev) => ({ ...prev, password: e.target.value }))}
+                onChange={(e) => setRegisterForm({ password: e.target.value })}
                 placeholder="请输入密码"
                 required
               />
@@ -1026,7 +1069,7 @@ export default function GamePage() {
                 id="reg-confirm"
                 type="password"
                 value={registerForm.confirmPassword}
-                onChange={(e) => setRegisterForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                onChange={(e) => setRegisterForm({ confirmPassword: e.target.value })}
                 placeholder="请再次输入密码"
                 required
               />
@@ -1051,7 +1094,7 @@ export default function GamePage() {
               <Input
                 id="custom-name"
                 value={customModeForm.name}
-                onChange={(e) => setCustomModeForm((prev) => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setCustomModeForm({ name: e.target.value })}
                 placeholder="例如：末日生存"
               />
             </div>
@@ -1060,7 +1103,7 @@ export default function GamePage() {
               <Input
                 id="custom-desc"
                 value={customModeForm.description}
-                onChange={(e) => setCustomModeForm((prev) => ({ ...prev, description: e.target.value }))}
+                onChange={(e) => setCustomModeForm({ description: e.target.value })}
                 placeholder="例如：在末日世界中生存，寻找希望"
               />
             </div>
@@ -1069,7 +1112,7 @@ export default function GamePage() {
               <Textarea
                 id="custom-prompt"
                 value={customModeForm.prompt}
-                onChange={(e) => setCustomModeForm((prev) => ({ ...prev, prompt: e.target.value }))}
+                onChange={(e) => setCustomModeForm({ prompt: e.target.value })}
                 placeholder="例如：末日生存类游戏，世界已经被病毒感染，玩家需要在危险的环境中寻找食物、武器和安全的避难所..."
                 rows={4}
               />
