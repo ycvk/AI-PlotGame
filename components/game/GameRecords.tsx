@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import { useGameStore, useUIStore } from '@/stores'
 import type { GameRecord } from '@/lib/story-engine-client'
+import { VirtualizedRecordsList } from './VirtualizedGameRecords'
+import { getFeatureFlags } from '@/lib/featureFlags'
 
 const DEFAULT_GAME_MODES = {
   adventure: { name: "冒险探索", icon: "🗺️" },
@@ -382,33 +384,58 @@ export const GameRecords: React.FC<GameRecordsProps> = ({
       </div>
 
       {/* 游戏记录列表 */}
-      <div className="space-y-3 max-h-[600px] overflow-y-auto">
-        {filteredAndSortedRecords.length === 0 ? (
-          <div className="text-center py-12">
-            {gameRecords.length === 0 ? (
-              <div className="space-y-3">
-                <div className="text-4xl">🎮</div>
-                <div>
-                  <p className="text-lg font-medium text-muted-foreground">还没有游戏记录</p>
-                  <p className="text-sm text-muted-foreground">开始一个新游戏来创建你的第一个记录</p>
+      {(() => {
+        const { virtualScroll } = getFeatureFlags()
+        
+        if (filteredAndSortedRecords.length === 0) {
+          return (
+            <div className="text-center py-12">
+              {gameRecords.length === 0 ? (
+                <div className="space-y-3">
+                  <div className="text-4xl">🎮</div>
+                  <div>
+                    <p className="text-lg font-medium text-muted-foreground">还没有游戏记录</p>
+                    <p className="text-sm text-muted-foreground">开始一个新游戏来创建你的第一个记录</p>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="text-4xl">🔍</div>
-                <div>
-                  <p className="text-lg font-medium text-muted-foreground">没有找到匹配的记录</p>
-                  <p className="text-sm text-muted-foreground">尝试调整搜索条件或筛选器</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-4xl">🔍</div>
+                  <div>
+                    <p className="text-lg font-medium text-muted-foreground">没有找到匹配的记录</p>
+                    <p className="text-sm text-muted-foreground">尝试调整搜索条件或筛选器</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )
+        }
+        
+        // 使用虚拟滚动
+        if (virtualScroll) {
+          return (
+            <VirtualizedRecordsList 
+              records={filteredAndSortedRecords}
+              height={600}
+              itemHeight={120}
+              onLoadGame={handleLoadGame}
+              onDeleteGame={handleDeleteGame}
+              onExportGame={handleExportGame}
+              formatDate={formatDate}
+              getGameModeName={getGameModeName}
+            />
+          )
+        }
+        
+        // 原始渲染方式
+        return (
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {filteredAndSortedRecords.map((record) => (
+              <GameRecordItem key={record.id} record={record} />
+            ))}
           </div>
-        ) : (
-          filteredAndSortedRecords.map((record) => (
-            <GameRecordItem key={record.id} record={record} />
-          ))
-        )}
-      </div>
+        )
+      })()}
     </div>
   )
 
