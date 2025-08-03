@@ -51,8 +51,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       if (token) {
         try {
           // 验证token的有效性
-          const { verifyToken } = await import('@/lib/auth')
-          const userData = await verifyToken(token)
+          const { AuthManager } = await import('@/lib/auth')
+          const userData = await AuthManager.verifyToken(token)
           
           if (userData) {
             useAuthStore.getState().setUser(userData)

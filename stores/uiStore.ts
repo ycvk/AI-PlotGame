@@ -142,6 +142,9 @@ interface UIStore {
   resetUI: () => void
 }
 
+// Toast定时器映射，用于清理
+const toastTimers = new Map<string, NodeJS.Timeout>()
+
 export const useUIStore = create<UIStore>()(
   devtools(
     subscribeWithSelector((set, get) => ({
@@ -314,18 +317,32 @@ export const useUIStore = create<UIStore>()(
         
         // 自动移除 toast
         const duration = toast.duration || 5000
-        setTimeout(() => {
+        const timerId = setTimeout(() => {
           get().removeToast(id)
         }, duration)
+        
+        // 保存定时器ID以便清理
+        toastTimers.set(id, timerId)
       },
       
       removeToast: (id: string) => {
+        // 清理定时器
+        const timerId = toastTimers.get(id)
+        if (timerId) {
+          clearTimeout(timerId)
+          toastTimers.delete(id)
+        }
+        
         set((state) => ({
           toasts: state.toasts.filter(toast => toast.id !== id)
         }))
       },
       
       clearToasts: () => {
+        // 清理所有定时器
+        toastTimers.forEach((timerId) => clearTimeout(timerId))
+        toastTimers.clear()
+        
         set({ toasts: [] })
       },
       
@@ -397,6 +414,9 @@ export const useUIStore = create<UIStore>()(
       
       // 重置UI状态
       resetUI: () => {
+        // 先清理所有toasts和定时器
+        get().clearToasts()
+        
         set({
           activeTab: 'login',
           settingsTab: 'ai',
@@ -406,7 +426,6 @@ export const useUIStore = create<UIStore>()(
           showGameMenu: false,
           sidebarCollapsed: false,
           modal: { type: 'none' },
-          toasts: [],
           globalLoading: false,
           loadingMessage: '',
           showChoices: true,

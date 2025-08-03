@@ -15,6 +15,7 @@ export interface GameSettings {
   theme: 'light' | 'dark' | 'system'
   language: 'zh' | 'en'
   streamEnabled: boolean
+  gameMode: string
 }
 
 interface ConfigStore {
@@ -54,6 +55,12 @@ interface ConfigStore {
   isLoading: boolean
   isSaving: boolean
   
+  // 模型获取状态
+  modelsFetchStatus: {
+    type: 'success' | 'error' | null
+    message: string
+  }
+  
   // 初始化
   initialize: () => Promise<void>
   
@@ -80,6 +87,7 @@ interface ConfigStore {
   clearAvailableModels: () => void
   setAvailableModels: (models: AIModel[]) => void
   setIsLoadingModels: (loading: boolean) => void
+  setModelsFetchStatus: (status: { type: 'success' | 'error' | null; message: string }) => void
   
   // 自定义游戏模式管理
   addCustomGameMode: (id: string, mode: CustomGameMode) => void
@@ -120,7 +128,8 @@ export const useConfigStore = create<ConfigStore>()(
         maxChoices: 4,
         theme: 'system',
         language: 'zh',
-        streamEnabled: true
+        streamEnabled: true,
+        gameMode: 'adventure'
       },
       
       systemInfo: {
@@ -141,6 +150,11 @@ export const useConfigStore = create<ConfigStore>()(
       error: null,
       isLoading: false,
       isSaving: false,
+      
+      modelsFetchStatus: {
+        type: null,
+        message: ''
+      },
       
       // 初始化
       initialize: async () => {
@@ -169,7 +183,8 @@ export const useConfigStore = create<ConfigStore>()(
               maxChoices: config.maxChoices,
               theme: config.theme,
               language: config.language,
-              streamEnabled: config.streamEnabled
+              streamEnabled: config.streamEnabled,
+              gameMode: config.gameMode || 'adventure'
             },
             systemInfo,
             customGameModes: config.customGameModes,
@@ -211,7 +226,8 @@ export const useConfigStore = create<ConfigStore>()(
               maxChoices: config.maxChoices,
               theme: config.theme,
               language: config.language,
-              streamEnabled: config.streamEnabled
+              streamEnabled: config.streamEnabled,
+              gameMode: config.gameMode || 'adventure'
             },
             systemInfo,
             customGameModes: config.customGameModes,
@@ -265,7 +281,8 @@ export const useConfigStore = create<ConfigStore>()(
             maxChoices: 4,
             theme: 'system',
             language: 'zh',
-            streamEnabled: true
+            streamEnabled: true,
+            gameMode: 'adventure'
           },
           customGameModes: {},
           error: null
@@ -284,7 +301,7 @@ export const useConfigStore = create<ConfigStore>()(
         
         // 分发更新到适当的状态分片
         const aiConfigKeys = ['provider', 'baseUrl', 'apiKey', 'model', 'modelsPath', 'chatPath']
-        const gameSettingsKeys = ['autoSave', 'storyLength', 'maxChoices', 'theme', 'language', 'streamEnabled']
+        const gameSettingsKeys = ['autoSave', 'storyLength', 'maxChoices', 'theme', 'language', 'streamEnabled', 'gameMode']
         
         const aiConfigUpdates: any = {}
         const gameSettingsUpdates: any = {}
@@ -419,6 +436,10 @@ export const useConfigStore = create<ConfigStore>()(
         set({ isLoadingModels })
       },
       
+      setModelsFetchStatus: (modelsFetchStatus: { type: 'success' | 'error' | null; message: string }) => {
+        set({ modelsFetchStatus })
+      },
+      
       // 自定义游戏模式管理
       addCustomGameMode: (id: string, mode: CustomGameMode) => {
         const { configManager } = get()
@@ -490,7 +511,7 @@ export const useConfigStore = create<ConfigStore>()(
           modelsPath: aiConfig.modelsPath,
           chatPath: aiConfig.chatPath,
           streamEnabled: gameSettings.streamEnabled,
-          gameMode: 'adventure', // 默认游戏模式
+          gameMode: gameSettings.gameMode,
           maxChoices: gameSettings.maxChoices,
           storyLength: gameSettings.storyLength,
           theme: gameSettings.theme,

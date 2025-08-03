@@ -47,11 +47,11 @@ export const GameModeSelector: React.FC<GameModeSelectorProps> = ({
 
   // 获取所有游戏模式（默认 + 自定义）
   const getAllGameModes = () => {
-    const allModes = { ...DEFAULT_GAME_MODES }
+    const allModes: Record<string, { name: string; desc: string; icon: string }> = { ...DEFAULT_GAME_MODES }
     
     // 添加自定义模式
     Object.entries(customGameModes).forEach(([key, mode]) => {
-      allModes[key as keyof typeof allModes] = {
+      allModes[key] = {
         name: mode.name,
         desc: mode.description,
         icon: "🎲"

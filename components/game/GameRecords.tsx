@@ -53,8 +53,17 @@ export const GameRecords: React.FC<GameRecordsProps> = ({
   onOpenChange,
   className
 }) => {
-  const { gameRecords, loadGame, deleteGame, exportCurrentGame, importGame, isGenerating } = useGameStore()
-  const { showModal, hideModal, addToast } = useUIStore()
+  // 精确订阅状态 - 避免不必要的重渲染
+  const gameRecords = useGameStore(state => state.gameRecords)
+  const loadGame = useGameStore(state => state.loadGame)
+  const deleteGame = useGameStore(state => state.deleteGame)
+  const exportCurrentGame = useGameStore(state => state.exportCurrentGame)
+  const importGame = useGameStore(state => state.importGame)
+  const isGenerating = useGameStore(state => state.isGenerating)
+  
+  const showModal = useUIStore(state => state.showModal)
+  const hideModal = useUIStore(state => state.hideModal)
+  const addToast = useUIStore(state => state.addToast)
   
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'mode'>('date')

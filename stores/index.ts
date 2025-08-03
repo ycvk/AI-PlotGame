@@ -12,7 +12,7 @@ export { useUIStore } from './uiStore'
 export type { ActiveTab, SettingsTab, ModalType } from './uiStore'
 
 // 组合 store 的高级 hooks
-import { useAuthStore } from './authStore'
+import { useAuthStore, initializeAuth } from './authStore'
 import { useGameStore } from './gameStore'
 import { useConfigStore } from './configStore'
 import { useUIStore } from './uiStore'
@@ -44,12 +44,6 @@ export const initializeStores = async () => {
   }
 }
 
-// 清理所有 stores 的函数
-export const cleanupStores = () => {
-  useAuthStore.getState().logout()
-  useGameStore.getState().cleanup()
-  useUIStore.getState().resetUI()
-}
 
 // 获取所有 stores 状态的工具函数
 export const getStoresState = () => ({
@@ -59,8 +53,11 @@ export const getStoresState = () => ({
   ui: useUIStore.getState()
 })
 
+// 全局订阅清理函数集合
+const unsubscribeFunctions: (() => void)[] = []
+
 // 订阅认证状态变化，自动处理游戏引擎初始化
-useAuthStore.subscribe(
+const unsubscribeAuth = useAuthStore.subscribe(
   (state) => state.user,
   async (user, previousUser) => {
     // 用户登录时初始化游戏引擎
@@ -77,9 +74,10 @@ useAuthStore.subscribe(
     }
   }
 )
+unsubscribeFunctions.push(unsubscribeAuth)
 
 // 订阅配置变化，自动更新游戏引擎配置
-useConfigStore.subscribe(
+const unsubscribeConfig = useConfigStore.subscribe(
   (state) => state.aiConfig,
   (aiConfig, previousAIConfig) => {
     const engine = useGameStore.getState().engine
@@ -89,10 +87,13 @@ useConfigStore.subscribe(
     }
   }
 )
+unsubscribeFunctions.push(unsubscribeConfig)
 
 // 响应式屏幕尺寸监听
+let updateScreenSize: (() => void) | null = null
+
 if (typeof window !== 'undefined') {
-  const updateScreenSize = () => {
+  updateScreenSize = () => {
     useUIStore.getState().updateScreenSize(window.innerWidth, window.innerHeight)
   }
   
@@ -101,16 +102,25 @@ if (typeof window !== 'undefined') {
   
   // 监听窗口尺寸变化
   window.addEventListener('resize', updateScreenSize)
-  
 }
 
-// 清理函数
-export const cleanupEventListeners = () => {
-  const updateScreenSize = () => {
-    const { useUIStore } = require('./uiStore')
-    useUIStore.getState().updateScreenSize(window.innerWidth, window.innerHeight)
-    useUIStore.getState().setIsMobile(window.innerWidth < 768)
+// 统一的清理函数
+export const cleanupStores = () => {
+  // 清理所有订阅
+  unsubscribeFunctions.forEach(unsubscribe => unsubscribe())
+  unsubscribeFunctions.length = 0
+  
+  // 清理窗口事件监听器
+  if (typeof window !== 'undefined' && updateScreenSize) {
+    window.removeEventListener('resize', updateScreenSize)
   }
   
-  window.removeEventListener('resize', updateScreenSize)
+  // 清理各个store的状态
+  useGameStore.getState().cleanup()
+  useUIStore.getState().resetUI()
+}
+
+// 在页面卸载时自动清理
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', cleanupStores)
 }
