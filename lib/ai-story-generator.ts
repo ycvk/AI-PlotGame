@@ -1,4 +1,5 @@
 import type { GameConfig } from "./config"
+import { PromptEngine, EnhancedStoryContext, createPromptEngine } from "./prompt-engine"
 
 export interface StoryContext {
   currentScene: string
@@ -22,9 +23,18 @@ export interface GeneratedStory {
 
 export class AIStoryGenerator {
   private config: GameConfig
+  private promptEngine?: PromptEngine
+  private enableAdvancedPrompts: boolean
+  private lastContext?: StoryContext | EnhancedStoryContext // 保存最后的上下文用于参数优化
 
   constructor(config: GameConfig) {
     this.config = config
+    // 通过环境变量启用高级提示词功能，默认启用
+    this.enableAdvancedPrompts = process.env.NEXT_PUBLIC_ENABLE_ADVANCED_PROMPTS !== 'false'
+    
+    if (this.enableAdvancedPrompts) {
+      this.promptEngine = createPromptEngine(true)
+    }
   }
 
   // 更新配置
@@ -34,6 +44,7 @@ export class AIStoryGenerator {
 
   async generateStoryNode(context: StoryContext, onStream?: (content: string) => void): Promise<GeneratedStory | null> {
     try {
+      this.lastContext = context // 保存上下文
       const prompt = this.buildPrompt(context)
       const response = await this.callAI(prompt, onStream)
       return this.parseResponse(response)
@@ -52,6 +63,8 @@ export class AIStoryGenerator {
       playerInventory: [],
       gameVariables: {},
     }
+    
+    this.lastContext = context // 保存上下文
 
     const prompt = this.buildInitialPrompt(gameMode)
 
@@ -65,6 +78,27 @@ export class AIStoryGenerator {
   }
 
   private buildInitialPrompt(gameMode: string): string {
+    // 如果启用高级提示词，使用PromptEngine
+    if (this.enableAdvancedPrompts && this.promptEngine) {
+      const context: EnhancedStoryContext = {
+        currentScene: "开始",
+        playerChoices: [],
+        gameMode,
+        storyHistory: [],
+        playerInventory: [],
+        gameVariables: {},
+        storyArc: 'beginning',
+        emotionalState: 'neutral'
+      }
+      
+      return this.promptEngine.generatePrompt(context, 'initial')
+    }
+    
+    // 保留原有逻辑作为后备
+    return this.buildLegacyInitialPrompt(gameMode)
+  }
+  
+  private buildLegacyInitialPrompt(gameMode: string): string {
     const defaultModes = {
       adventure: "冒险探索类游戏，充满未知的世界和挑战",
       mystery: "悬疑推理类游戏，需要解开谜团和找出真相",
@@ -119,6 +153,17 @@ export class AIStoryGenerator {
   }
 
   private buildPrompt(context: StoryContext): string {
+    // 如果启用高级提示词，使用PromptEngine
+    if (this.enableAdvancedPrompts && this.promptEngine) {
+      const enhancedContext = this.convertToEnhancedContext(context)
+      return this.promptEngine.generatePrompt(enhancedContext, 'continuation')
+    }
+    
+    // 保留原有逻辑作为后备
+    return this.buildLegacyPrompt(context)
+  }
+  
+  private buildLegacyPrompt(context: StoryContext): string {
     const language = this.config.language === "zh" ? "中文" : "English"
 
     return `你是一个专业的互动小说作家。基于以下游戏状态继续故事：
@@ -158,6 +203,48 @@ export class AIStoryGenerator {
   }
 }`
   }
+  
+  // 将普通上下文转换为增强上下文
+  private convertToEnhancedContext(context: StoryContext): EnhancedStoryContext {
+    const enhancedContext: EnhancedStoryContext = {
+      ...context,
+      // 分析故事发展阶段
+      storyArc: this.analyzeStoryArc(context.storyHistory),
+      // 分析情感状态
+      emotionalState: this.analyzeEmotionalState(context)
+    }
+    
+    return enhancedContext
+  }
+  
+  // 分析故事发展阶段
+  private analyzeStoryArc(storyHistory: string[]): 'beginning' | 'development' | 'climax' | 'resolution' {
+    const historyLength = storyHistory.length
+    
+    if (historyLength < 5) return 'beginning'
+    if (historyLength < 15) return 'development'  
+    if (historyLength < 25) return 'climax'
+    return 'resolution'
+  }
+  
+  // 分析当前情感状态
+  private analyzeEmotionalState(context: StoryContext): string {
+    // 基于游戏变量和模式推断情感状态
+    const mood = context.gameVariables.mood || context.gameVariables.atmosphere
+    if (mood) return mood as string
+    
+    // 基于游戏模式的默认情感状态
+    const modeEmotions: Record<string, string> = {
+      horror: 'tense',
+      romance: 'romantic',
+      mystery: 'curious',
+      adventure: 'excited',
+      scifi: 'wonder',
+      fantasy: 'magical'
+    }
+    
+    return modeEmotions[context.gameMode] || 'neutral'
+  }
 
   private async callAI(prompt: string, onStream?: (content: string) => void): Promise<string> {
     const baseUrl = this.config.baseUrl.replace(/\/$/, "")
@@ -172,6 +259,24 @@ export class AIStoryGenerator {
       streamEnabled: this.config.streamEnabled,
       hasApiKey: !!this.config.apiKey,
     })
+    
+    // 获取动态参数
+    let temperature = 0.8
+    let max_tokens = 1000
+    
+    if (this.enableAdvancedPrompts && this.promptEngine && this.lastContext) {
+      const gameMode = this.lastContext.gameMode
+      const params = this.promptEngine.getRecommendedParameters(gameMode)
+      temperature = params.temperature
+      max_tokens = params.max_tokens
+      
+      console.log("AI Dynamic Parameters:", {
+        gameMode,
+        temperature,
+        max_tokens,
+        storyArc: (this.lastContext as EnhancedStoryContext).storyArc
+      })
+    }
 
     const requestBody = {
       model: this.config.model,
@@ -185,8 +290,8 @@ export class AIStoryGenerator {
           content: prompt,
         },
       ],
-      temperature: 0.8,
-      max_tokens: 1000,
+      temperature,
+      max_tokens,
       stream: this.config.streamEnabled,
     }
 
