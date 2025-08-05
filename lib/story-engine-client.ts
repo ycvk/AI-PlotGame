@@ -1,5 +1,6 @@
 import { AIStoryGenerator, type StoryContext } from "./ai-story-generator"
 import { ConfigManager } from "./config"
+import { ContextManager, createContextManager } from "./context-manager"
 
 export interface StoryChoice {
   id: string
@@ -61,6 +62,7 @@ export class ClientStoryEngine {
   private hasDatabase: boolean
   private userId?: number
   private aiGenerator: AIStoryGenerator
+  private contextManager: ContextManager // 新增：上下文管理器
   private isGenerating = false
 
   constructor(hasDatabase: boolean, userId?: number) {
@@ -69,6 +71,14 @@ export class ClientStoryEngine {
 
     const config = ConfigManager.getInstance().getConfig()
     this.aiGenerator = new AIStoryGenerator(config)
+
+    // 初始化上下文管理器
+    this.contextManager = createContextManager({
+      maxHistoryItems: 20,
+      maxChoiceHistory: 50,
+      enableCompression: true,
+      compressionThreshold: 1000
+    })
 
     this.gameState = {
       currentGameId: null,
@@ -452,14 +462,8 @@ export class ClientStoryEngine {
       gameRecord.history.push(currentNode.id)
       gameRecord.storyHistory.push(`${currentNode.title}: ${choiceText}`)
 
-      const context: StoryContext = {
-        currentScene: currentNode.title,
-        playerChoices: [choiceText],
-        gameMode: gameRecord.gameMode,
-        storyHistory: gameRecord.storyHistory,
-        playerInventory: gameRecord.inventory,
-        gameVariables: gameRecord.variables,
-      }
+      // 使用新的上下文管理器构建完整上下文
+      const context = this.contextManager.buildStoryContext(gameRecord, choiceText)
 
       const generatedStory = await this.aiGenerator.generateStoryNode(context, onStream)
 

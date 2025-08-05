@@ -165,13 +165,23 @@ export class AIStoryGenerator {
   
   private buildLegacyPrompt(context: StoryContext): string {
     const language = this.config.language === "zh" ? "中文" : "English"
+    
+    // 改进历史处理：从 slice(-3) 扩展到 slice(-8)
+    const historyContext = context.storyHistory.length > 8 
+      ? `早期事件概要...后续发展：${context.storyHistory.slice(-8).join(" -> ")}` 
+      : context.storyHistory.join(" -> ") || "刚开始"
+    
+    // 增强选择历史显示（显示最近5个选择）
+    const choiceHistory = context.playerChoices.length > 5
+      ? `...${context.playerChoices.slice(-5).join(" → ")}`
+      : context.playerChoices.join(" → ") || "无"
 
     return `你是一个专业的互动小说作家。基于以下游戏状态继续故事：
 
 当前场景：${context.currentScene}
 游戏模式：${context.gameMode}
-玩家历史选择：${context.playerChoices.join(", ") || "无"}
-故事历史：${context.storyHistory.slice(-3).join(" -> ") || "刚开始"}
+玩家选择历程：${choiceHistory}
+故事发展历程：${historyContext}
 玩家物品：${context.playerInventory.join(", ") || "无"}
 游戏变量：${JSON.stringify(context.gameVariables)}
 
@@ -211,7 +221,13 @@ export class AIStoryGenerator {
       // 分析故事发展阶段
       storyArc: this.analyzeStoryArc(context.storyHistory),
       // 分析情感状态
-      emotionalState: this.analyzeEmotionalState(context)
+      emotionalState: this.analyzeEmotionalState(context),
+      // 分析冲突等级
+      conflictLevel: this.analyzeConflictLevel(context),
+      // 提取叙事主题
+      narrativeThemes: this.extractNarrativeThemes(context.storyHistory),
+      // 识别关键事件
+      keyEvents: this.identifyKeyEvents(context.storyHistory)
     }
     
     return enhancedContext
@@ -244,6 +260,57 @@ export class AIStoryGenerator {
     }
     
     return modeEmotions[context.gameMode] || 'neutral'
+  }
+  
+  // 分析冲突等级
+  private analyzeConflictLevel(context: StoryContext): 'low' | 'medium' | 'high' {
+    const historyLength = context.storyHistory.length
+    
+    // 基于故事长度判断冲突升级
+    if (historyLength < 5) return 'low'
+    if (historyLength < 15) return 'medium'
+    return 'high'
+  }
+  
+  // 提取叙事主题
+  private extractNarrativeThemes(storyHistory: string[]): string[] {
+    if (storyHistory.length === 0) return []
+    
+    const themes: string[] = []
+    const content = storyHistory.join(' ')
+    
+    // 主题关键词匹配
+    const themeKeywords = {
+      '冒险': ['探索', '发现', '未知', '旅程'],
+      '友情': ['朋友', '伙伴', '帮助', '支持'],
+      '成长': ['学会', '成长', '变化', '进步'],
+      '牺牲': ['牺牲', '代价', '失去', '付出'],
+      '爱情': ['爱', '喜欢', '心动', '浪漫']
+    }
+    
+    Object.entries(themeKeywords).forEach(([theme, keywords]) => {
+      if (keywords.some(keyword => content.includes(keyword))) {
+        themes.push(theme)
+      }
+    })
+    
+    return themes
+  }
+  
+  // 识别关键事件
+  private identifyKeyEvents(storyHistory: string[]): string[] {
+    if (storyHistory.length === 0) return []
+    
+    const keyEvents: string[] = []
+    const eventMarkers = ['第一次', '突然', '决定', '发现', '遇到', '选择']
+    
+    storyHistory.forEach(entry => {
+      if (eventMarkers.some(marker => entry.includes(marker))) {
+        keyEvents.push(entry)
+      }
+    })
+    
+    return keyEvents.slice(-10) // 最多保留10个关键事件
   }
 
   private async callAI(prompt: string, onStream?: (content: string) => void): Promise<string> {
